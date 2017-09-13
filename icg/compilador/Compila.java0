@@ -1,0 +1,1134 @@
+/*
+ *
+ * Chamado por: icg.compilador.Compilador.ButtonHandler.actionPerformed(ActionEvent e)
+ *
+ */
+
+package icg.compilador;
+
+import configuracoes.Configuracao;
+
+/*
+ * Elemento: "estrutura" para cada item léxico
+ * Leia    : para leitura da cadeia de carateres (expressão aritmética)
+ * Itens   : monta os itens léxico num "Vector" (faz o papel de um Analisador Léxico muito simplificado...)
+ *
+
+000000
+799
+798
+797
+099
+1$0
+098
+2$0
+1$0
+097
+2$0
+196
+896
+0-0000
+eia ( a ) ;
+leia ( b ) ;
+leia ( c ) ;
+d = a + b + c ;
+escreva ( d ) ;
+
+ */
+
+
+import java.io.*;
+import java.util.StringTokenizer;
+import java.util.Vector;
+import icg.util.ListaLigada;
+import icg.util.No;
+
+//import java.util.LinkedList;
+//import java.util.ListIterator;
+
+public class Compila {
+
+    String cadeia;   // para a expressão a ser analisada
+    Vector itensLex; // para armazenar itens léxicos: seria 
+                     //montado pelo Analisador Léxico (mas aqui vai via StringTockenizer)
+
+    Pilha posicoesTemporarias;
+    CodigoObjeto programa;
+
+    ListaLigada listaPosicoes = new ListaLigada(); // lista com todos os comandos inseridos, para trocar ocorrência de '$' (caso de uso da pilha de execução)
+
+    int num_item;    // número do item léxico atual
+    int num_linha;       // linha atual do arquivo ( se existir )
+    boolean OK;
+
+    String pilhaDeInformacoes = new String("");
+    String programaAnalisado = new String( "" );
+
+    static int[] linhas = null;
+
+
+    /*
+      devolve o tipo do item léxico
+       Elemento.NUMERO
+       Elemento.COMANDOS
+       Elemento.VARIAVEL
+       Elemento.OUTROS
+    */
+    private int tipo (int i) {
+    //Object obj = itensLex.elementAt(i);
+    //if (obj instanceof Elemento)
+    //   return ((Elemento)obj).tipo();
+    //else return -1;
+    return ((Elemento)itensLex.elementAt(i)).tipo();
+    }
+
+
+    // devolve o item léxico atual.
+    private String item (int i) {
+    return ((Elemento)itensLex.elementAt(i)).obj();
+    }
+
+
+    private void item () {
+    programaAnalisado += item(num_item)+" ";
+    }
+
+    // Avanca para o proximo item lexico...
+    private void avanca_item () {
+
+    item();
+
+
+    if ( linhas != null ) {
+
+        linhas[ num_linha ]--;
+        while ( num_linha < linhas.length &&
+    	    linhas[ num_linha ] == 0 ) {
+
+    	num_linha++;
+    	programaAnalisado += "\n" + (num_linha + 1) + ". " ; // ????
+        }
+    }
+
+    num_item++;
+    }
+
+    static private void initLinhas( BufferedReader buff ) {
+
+    Vector v = new Vector();
+	Vector st = new Vector();
+    //StringTokenizer st;
+    String s;
+    Integer n;
+    int i;
+	
+    s = LeArq.linha( buff );
+    while ( s != null ) {
+
+        //st = new StringTokenizer( s );
+        //n = new Integer( st.countTokens() );
+	    st = AnaLex.constroiTokens(s);
+	    n = new Integer(st.size());
+        v.addElement( n );
+        s = LeArq.linha( buff );
+    }
+
+    // Alocando vetor de linhas...
+    linhas = new int[ v.size() ];
+
+    for ( i = 0; i < v.size(); i++ ) {
+
+        n = (Integer) v.elementAt( i );
+        linhas[i] = n.intValue();
+    }
+    }
+
+
+
+    public static void main(String[] args) {
+    Compila comp;
+    BufferedReader arquivo;
+    String linhaArquivo;
+
+    if (args.length < 1)
+        comp = new Compila();
+
+    else {
+
+        linhaArquivo = args[0];
+        System.out.println (" teste" + linhaArquivo);
+        arquivo = LeArq.buffer( linhaArquivo );
+
+        if ( arquivo != null ) {
+
+    	try {
+
+    	    //Se existe um arquivo...
+    	    arquivo.mark( 3000 );
+    	    initLinhas( arquivo );
+
+    	    arquivo.reset();
+
+    	} catch( IOException e ) { System.out.println( "PAU" ); }
+
+    	linhaArquivo = LeArq.tudo( arquivo );
+    	//System.out.println( linhaArquivo );
+        }
+
+        comp = new Compila( linhaArquivo );
+    }
+
+    System.out.println( comp.imprimeProgramaAnalisado() );
+    System.out.println( comp.informacoesDeSaida() );
+
+    if ( comp.OK )
+        System.out.println( comp.programa );
+    }
+
+
+    public Compila () {
+
+    System.out.print("Digite uma sequencia de comandos\n(help - informações; exit - sair): " );
+    cadeia = Leia.readLine();
+    
+    while (true){
+
+        posicoesTemporarias = new Pilha();
+        programa = new CodigoObjeto( 0 ); // ( 1 ); [04/08/2004]
+
+        if (cadeia.equals("exit"))
+    	return;
+        else
+    	reconheceCadeia();
+
+        System.out.print("Digite uma sequencia de comandos\n(help - informações; exit - sair): ");
+        cadeia = Leia.readLine();
+    }    
+    }
+
+    public Compila (String cad) {
+    num_linha = 0;
+    posicoesTemporarias = new Pilha();
+    programa = new CodigoObjeto( 0 ); // [04/08/2004]( 1 );
+    //- System.out.println("[icg.compilador.Compila.Compila(String)] "+cad);
+
+    cadeia = cad;
+    reconheceCadeia();
+    }
+  
+
+
+    public String informacoesDeSaida() {
+
+    pilhaDeInformacoes += "Compilacao:" + programa.MSG;
+    return pilhaDeInformacoes;
+    }
+
+    public String imprimeProgramaAnalisado() {
+
+    return programaAnalisado;
+    }
+
+
+  private void reconheceCadeia () {
+    int i = 0;  
+
+    // monta vetor com itens léxicos, funciona como o analisador sintatico
+    // se ele for == null => erro de sintaxe.
+    itensLex = Itens.montaItens( cadeia ); // "cadeia" contém um "string" com o texto a ser compilado
+    //System.out.println("[icg.compilador.Compila!reconheceCadeia] 1 - cadeia:\n"+cadeia);
+     
+    if ( itensLex != null ) {
+        //System.out.print("Teste: ");
+        // lista itens léxicos, só para conferência
+        // Itens.listaItens(itensLex);
+       }
+
+    // posiciona para leitura do primeiro item léxico
+    num_item = 0;
+    programaAnalisado += "\n" + (num_linha + 1) + ". " ;
+
+    System.out.println("[icg.compilador.Compila!reconheceCadeia] cadeia:\n"+cadeia);
+    //System.out.println("[icg.compilador.Compila!reconheceCadeia] "+num_linha+": "+programaAnalisado);
+
+    if ( itensLex != null  && this.INICIA() ) {
+       pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nCadeia reconhecida\n" );
+       OK = true;
+       }
+    else
+       pilhaDeInformacoes = pilhaDeInformacoes.concat("\nCadeia NÃO reconhecida\n");
+    }
+
+
+    // Inicia a analise dos comandos C().
+    boolean INICIA () {
+
+    while ( true ) {
+
+      //if (num_linha>-1 && linhas!=null)
+      //   System.out.println("[icg.compilador.Compila!INICIA] "+linhas[num_linha]);
+      //else System.out.println("[icg.compilador.Compila!INICIA] - "+num_linha+" "+linhas);
+
+      if ( !C() ) {
+         pilhaDeInformacoes = pilhaDeInformacoes.concat( "Linha " + (num_linha+1) + ". Erro: comando invalido!" );
+         return false;
+         }
+
+// O "programa.atualizaComandos(posicoes);" serve para trocar $ pela primeira posição de memória disponível, logo deve ser a
+// última coisa a ser feita!!
+programa.atualizaComandos(listaPosicoes);
+
+      // Se a cadeia chegou ateh o final verdadeira ela eh reconhecida...
+      if ( num_item >= itensLex.size() ) {
+         // END
+         programa.adicionaComando( "0-0000" );
+         return true;
+         }
+      }
+    }
+
+
+
+  void copiaListaPosicoes (ListaLigada posicoes) {
+    //No noListaDefinitiva = listaPosicoes.posicaoAtualLista(); // último No na lista definitiva
+    No noAux             = posicoes.inicioLista();            // primeiro elemento na lista atual
+	while ( noAux != null ) { //iterador.hasNext() ) {
+	    listaPosicoes.add( noAux.obj() );
+        noAux = noAux.proximo();
+        }
+
+}
+
+
+    /* Grafos sintáticos (ou diagramas sintáticos)
+
+     *
+     *                                   +<-----------------------------------+
+     *                 1                 !  2                  3              ^
+     * T --+---------> ident ------------+-> * -----+--------> ident ---------+
+     *     |                      ^      |       ^  |                         |
+     *     +--> ( -> [ E ] -> ) --+      +-> / ->+  +--> ( -> [ E ] -> ) -> --+
+     *          4    5        6          |  7            8    9        10
+     *                                   +-||    
+     *                        
+     *                          +<--------------------+
+     *         1        2       !       3       4     ^
+     * E --+-> + --+--->[ T ] --+---> + ----->[ T ] --+
+     *     |       ^            |         ^
+     *     +-> - ->|            +---> - --+
+     *     |   5   |            |     6  
+     *     +-------+            +-||
+     *
+     *
+     * [24/08/2004] revisão
+     *
+     *                   +<-----------------------+
+     *         1         !       2            3   ^
+     * E --+-> + --+-----+---> [ T ] --+---> + ---+
+     *     |       ^                   |      4   ^
+     *     +-> - ->|                   +---> - ---+
+     *     |    5  |                   |      6   |
+     *     +-------+                   +---> ou --+
+     *                                 |
+     *                                 +--->||
+     *                                 
+     *                                 
+     *    +----------------------------+
+     *    !                            |
+     * T ---> [ Fator ] ---+---> * --->+
+     *                     |           |
+     *                     +---> / --->+
+     *                     |           |
+     *                     +---> e --->+
+     *                     |           |
+     *                     +--->||
+     *
+     * FATOR --+--> NUM -------------->+---> ||
+     *         |                       |
+     *         +--> ID  -------------->|      
+     *         |                       | 
+     *         +-->  (  ---> [EXP] --->|      
+     *         |                       |
+     *         +--> ! [FATOR] -------->+
+     *                                 
+     *                                 
+     */
+
+    // Trata as expressoes entre parenteses.......
+    boolean Tpar () {
+
+System.out.println("[Compila!Tpar] item "+item(num_item)+" ? "+tipo(num_item));
+
+    if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( "(" ) ) { 
+        // => '('
+        avanca_item();
+        if ( !E() ) {
+           pilhaDeInformacoes = pilhaDeInformacoes.concat( "\n Erro: esperava um operando após" +
+                  		" \'(\' (encontrado \'" + item(num_item) + "\')" );
+           return false;
+           }
+
+        if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( ")" ) ) {
+        // => ')'
+           avanca_item();
+           return true;
+           }
+        else {
+           pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: esperava um \')\' (encontrado \'" + item( num_item ) + "\')" );
+           return false;
+           }
+       }
+    else {
+        pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: esperava um \'(\' ou operando (encontrado \'"+item( num_item )+"\')" );
+        return false;
+        }
+    }
+
+
+    // Analisa identificadores (variaveis ou numeros).
+    boolean ID () {
+
+System.out.println("[Compila!ID] item "+item(num_item)+" ? "+tipo(num_item));
+
+    //LinkedList posicoes = new LinkedList();
+    ListaLigada posicoes = new ListaLigada();
+
+    if ( tipo( num_item ) == Elemento.NUMERO || tipo( num_item ) == Elemento.VARIAVEL ) {
+        // Se eh operando...
+        if (tipo( num_item ) == Elemento.VARIAVEL) programa.aloca( item( num_item ) );
+        posicoes.add( new Integer( programa.getMemoria() ) );
+        //System.out.println("[Compila!ID] "+num_item+" -> "+item(num_item));
+        programa.empilha( item( num_item ) );
+        posicoesTemporarias.empilha( posicoes );
+        return true;
+       }
+    else
+        return false;
+    }
+
+
+    /* 
+       const : NUMERO
+       operadores, op logicos, (, {, etc... : OUTROS
+       variaveis: VARIAVEL
+    */
+    boolean T () {
+
+System.out.println("[Compila!T] início ");
+
+    String item_op = null;
+    String codigoParcial = null;
+    //LinkedList posicoes = new LinkedList();
+    ListaLigada posicoes = new ListaLigada();
+       
+    try {
+
+        while ( true ) {
+System.out.println("[Compila!T] item "+item(num_item)+" ? "+tipo(num_item));
+          if ( ID() ) {     	    
+    	     // é operando
+    	     avanca_item();
+
+    	     // 'Concatena' os comandos que ID empilhou junto com estes de T.
+    	     //posicoes.addAll( (LinkedList)posicoesTemporarias.desempilha() );
+    	     posicoes.addAll( (ListaLigada)posicoesTemporarias.desempilha() );
+    	     }
+    	  else
+    	     if ( !Tpar() ) {
+                if ( item_op == null )
+                    pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: esperado \'(\' ou operando" );
+                 else {
+                    // Se havia lido um operando antes....
+                    pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: esperava um operando ou \'(\' após \'" +
+                  			 item_op+"\' (encontrado \'" + item( num_item ) + "\')");
+                    item_op = null;
+                     }
+                 return false;
+    	     }
+
+    	  if ( codigoParcial != null ) {
+    	     // Guarda poicao a ser alterada.
+    	     posicoes.add( new Integer( programa.getMemoria() ) );
+    	     programa.aplicaCodigo( codigoParcial );
+    	     codigoParcial = null;
+    	     }
+          if ( num_item >= itensLex.size() - 1 ) {
+    	     posicoesTemporarias.empilha( posicoes );
+    	     return true;
+    	     }
+
+          if ( tipo( num_item ) == Elemento.OUTROS &&
+    	       ( item( num_item ).equals( "*" ) || item( num_item ).equals( "/" ) ) ) {    	    
+    	     // Se eh operador...
+    	     item_op = item( num_item );
+    	     if ( item_op.equals( "*" ) )
+                // MUL
+                codigoParcial = new String( "4" );
+    	     else
+                // DIV
+                codigoParcial = new String( "5" );
+    	     avanca_item();
+    	     }
+    	  else {
+    	     posicoesTemporarias.empilha( posicoes );
+    	     // => ainda ha um '+' ou '-'.
+    	     return true;
+    	     }
+    	
+        } // FIM DO WHILE
+
+    }
+    catch( java.lang.ArrayIndexOutOfBoundsException aobe ) {
+        pilhaDeInformacoes = pilhaDeInformacoes.concat( "\n" + "T - Erro: final de cadeia" );
+    }
+
+    return false;
+    }
+
+
+    boolean E () {
+
+System.out.println("[Compila!E] inicio ");
+
+    boolean primeira = true;
+    String codigoParcial = null;
+    //LinkedList posicoes = new LinkedList();
+    ListaLigada posicoes = new ListaLigada();
+
+    try {
+
+        while ( true ) {
+System.out.println("[Compila!E] item "+item(num_item)+" ? "+tipo(num_item));
+          if (tipo( num_item )== Elemento.OUTROS &&
+    	      ( item( num_item ).equals( "+" ) || item( num_item ).equals( "-" ) ) ) {
+             // => é operador unário
+    	     if ( primeira ) {
+                // Para empilhar o -1 ou 1
+                posicoes.add( new Integer( programa.getMemoria() ) );
+		
+                if ( item( num_item ).equals( "-" ) )
+                    programa.empilha( String.valueOf( -1 ) );
+                else
+                    programa.empilha( String.valueOf( 1 ) );
+		
+                codigoParcial = new String( "4" );
+                primeira = false;
+    	        }
+    	  else {
+              if ( item( num_item ).equals( "+" ) )
+                  codigoParcial = new String( "2" );
+              else
+                  codigoParcial = new String( "3" );
+    	      }
+
+    	  if ( num_item >= itensLex.size() - 1 ) {
+             pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: final de cadeia após um operador unário (\'+\' " +
+                                  "ou \'-\'), esperava operando");
+             return false;
+             }
+    	  avanca_item();
+          }
+    	
+    	
+    	if ( !T() ) {
+//System.out.println("[Compila!E] T == false ");
+    	   pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: esperava um operando (encontrado \'" + item( num_item ) + "\')");
+    	   return false;
+           }
+    	else { 
+    	   //posicoes.addAll( (LinkedList)posicoesTemporarias.desempilha() );
+    	   posicoes.addAll( (ListaLigada)posicoesTemporarias.desempilha() );
+    	   if ( codigoParcial != null ) {
+              posicoes.add( new Integer( programa.getMemoria() ) );
+              programa.aplicaCodigo( codigoParcial );
+      	      }
+ 
+// O "programa.atualizaComandos(posicoes);" serve para trocar $ pela primeira posição de memória disponível, logo deve ser a
+// última coisa a ser feita!!
+    	    // reconhecido T
+    	    if ( num_item >= itensLex.size() - 1 ) {
+//                        programa.atualizaComandos( posicoes );
+copiaListaPosicoes(posicoes);
+                    return true;
+    	    }
+
+    	    if ( ! (tipo( num_item )== Elemento.OUTROS && 
+			 ( item( num_item ).equals( "+" ) || item( num_item ).equals( "-" ) )) ) {
+                    // => pode ser um ')', '>'...'==', ';', etc...
+// O "programa.atualizaComandos(posicoes);" serve para trocar $ pela primeira posição de memória disponível, logo deve ser a
+// última coisa a ser feita!!
+//                        programa.atualizaComandos( posicoes );
+copiaListaPosicoes(posicoes);
+
+                    return true;
+       	        }
+    	    primeira = false;
+    	    }
+
+        } //FIM DO WHILE
+    	
+    } catch(java.lang.ArrayIndexOutOfBoundsException aobe) {
+
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nE - Erro: final de cadeia");
+        return false;
+    }
+    
+    }
+
+
+    // Trata comandos....
+    boolean C () { // chamado em: icg.compilador.Compila.item(Compila.java:54)
+System.out.println("[icg.compilador.Compila!C] inicio: "+item( num_item )+" "+tipo( num_item ));
+
+    try {
+    try {
+        //if (num_item>-1) //num_linha>-1) // && linhas!=null)
+        //   System.out.println("[icg.compilador.Compila!C] "+((Elemento)itensLex.elementAt(num_item)).obj+" tipo="+tipo( num_item ));
+
+        // se o item lido é um "if"
+        if ( tipo( num_item ) == Elemento.COMANDOS && item( num_item ).equals( Configuracao.cmd_if ) ) { // "if"
+    	avanca_item();
+// [20/08/2004] dúvida, já reconheceu "if" no comando acima, p/ que este IF() ????
+    	if ( !IF() ) { // completa reconhecimento do "if"
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: Era esperado Expressão lógica." );
+    	    return false;
+    	    }
+    	else {
+                System.out.println("[icg.compilador.Compila!C] é \"if\": "+item(num_item));
+    	    programa.esvaziaAC();
+    	    return true;
+    	    }
+            }
+        // se o item lido é um "while"
+        else if ( tipo( num_item ) == Elemento.COMANDOS && item( num_item ).equals( Configuracao.cmd_while ) ) { // "while"
+    	avanca_item();
+    	if ( !WHILE() ){        	   
+    	   pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Era esperado Expressão lógica.");
+    	   return false;        	    
+    	   }
+    	else {
+    	   programa.esvaziaAC();
+    	   return true;
+    	   }
+            }
+
+        // identifica a parte da leitura de variáveis 
+        else if ( tipo( num_item ) == Elemento.COMANDOS && (item(num_item).equals( Configuracao.cmd_leia ) ) ) { // "leia"
+    	avanca_item();
+    	if ( !IO_LE() ){
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Parâmetros incorretos.");
+    	    return false;
+    	}
+    	else if ( num_item <= itensLex.size() - 1 && tipo(num_item) == Elemento.OUTROS && item(num_item).equals(";")) {
+    	    avanca_item();
+    	    return true;
+    	}
+    	else {
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Era esperado \';\'.");
+    	    return false;            
+    	}
+        }
+        
+        // identifiva a parte de escrita de variaveis
+        else if ( tipo( num_item ) == Elemento.COMANDOS && item( num_item ).equals( Configuracao.cmd_escreva) ) { // "escreve
+    	avanca_item();
+    	if ( !IO_ESCREVE() ) {
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Parametros incorretos.");
+    	    return false;
+    	}
+    	else if ( num_item <= itensLex.size() - 1 && tipo(num_item) == Elemento.OUTROS && item(num_item).equals(";")) {
+    	    avanca_item();
+    	    return true;
+    	}
+    	else {
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Era esperado \';\'.");
+    	    return false;            
+    	} 
+        }
+        
+        // se é operando
+        else if ( tipo( num_item ) == Elemento.VARIAVEL ){
+
+    	String var = item( num_item );
+
+    	programa.aloca( var );		
+    	avanca_item();
+    	
+            if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( "=" )) {
+    	    
+    	    avanca_item();
+    	    if ( !E() ) {
+                   pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: Era esperado expressão.");
+                   return false;
+    	       }
+    	    else {
+                    if ( num_item <= itensLex.size() - 1 && tipo(num_item) == Elemento.OUTROS && item(num_item).equals(";")) {
+                       programa.ACparaEE( var );
+                       programa.esvaziaAC();
+                       avanca_item();
+                       return true;
+                       }
+                    else {
+                       pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Era esperado \';\'.");
+                       return false;            
+                       }
+    	        } // else
+    	   } //if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( "=" )) {
+    	else {
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Era esperado o operador \'=\'.");
+    	    return false;
+    	}
+        } // else if ( tipo( num_item ) == Elemento.VARIAVEL ){
+
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: Era esperado variável. ");	
+        System.out.println("[icg.compilador.Compila!C] erro: \"Erro: era esperado variável.\" em: "+item(num_item));
+
+        return false;
+
+    } catch(java.lang.ArrayIndexOutOfBoundsException aobe) {
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nC - Erro: final de cadeia");
+        return false;
+    }
+
+    } catch(java.lang.ClassCastException cce) {
+	   // ??????????????????????????????????????????????????????????????????????????????????????????????
+	   // este erro é provocado principalmente por usar um só vetor, "itensLex", para armazenar o item e também seu
+	   // tipo (da metade p/ frente, isso é muito "desestruturado"
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nC - Erro, ClassCastException");
+        System.out.println("[Compila!C] Erro, ClassCastException, em tipo com número="+num_item+" "+
+			       itensLex.elementAt(num_item)+" "+itensLex.elementAt(itensLex.size()/2+num_item));
+	    cce.printStackTrace();
+        return false;
+    }
+
+       
+    }
+    
+
+    boolean EXPLOG () {
+
+
+    int marca;
+    boolean nao = false;
+    //LinkedList posicoes;
+    ListaLigada posicoes;
+
+    try {
+System.out.println("[Compila!EXPLOG] inicio ");
+
+
+
+// =================================================================================================
+if (1==1) return E();
+// =================================================================================================
+
+
+        while ( true ) {
+System.out.println("[Compila!EXPLOG] num_item="+num_item+" item "+item(num_item)+" ? "+tipo(num_item));
+          if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals( "!" ) ) {        	
+    	     if ( num_item >= itensLex.size() - 1 ) {        	    
+                pilhaDeInformacoes = pilhaDeInformacoes.concat(
+                                     "\nErro: final de cadeia após um operador lógico \'!\'. Era esperado espressao logica;" );
+System.out.println("[Compila!EXPLOG] Erro: final de cadeia após um operador lógico \'!\'. Era esperado espressao logica;" );
+                return false;
+    	        }
+    	      nao = true;
+    	      avanca_item();
+    	     }
+
+    	// Guardando a posicao do item lido... (gambiarra!)
+    	marca = num_item;
+
+    	if ( E() ) { // acabou de encontrar uma expr. lógica
+System.out.println("[Compila!EXPLOG] E()==true num_item="+num_item+" "+item(num_item)+" ? "+tipo(num_item));
+    	    // Guardei qual eh o tipo de comparacao.
+    	    String a = item(num_item);
+    	    if ( tipo(num_item) == Elemento.OUTROS && 
+                ( a.equals(">") || a.equals(">=") || a.equals("<") || a.equals("<=") || a.equals("==") || a.equals("!=") ) ) {
+                 avanca_item();
+                 if ( !E() ) {
+                     pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado expressão.");
+                     return false;
+                    }
+    	       }
+    	    else {        	    
+                 pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado operador lógico.");
+                 return false;
+    	        }
+
+    	    // Adiciona os comandos relativos a cada comparacao...
+    	    posicoes = programa.aplicaComparacao( a );
+
+    	}
+    	else {
+    	    // Gambiarra!!!! Devolvendo a marca, pois
+    	    // caso nao seja expressao ainda pode ser expressao logica
+    	    // se estiver entre parenteses.
+    	    num_item = marca;
+System.out.println("[Compila!EXPLOG] E()==false "+item(num_item)+" ? "+tipo(num_item));
+
+    	    if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals("(") ) {        	
+                    avanca_item();
+                    if ( EXPLOG() ) {                        
+                        if ( tipo(num_item) != Elemento.OUTROS || !item( num_item ).equals(")") ) {                            
+                    	pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado operador lógico.");
+                    	return false;          
+                        }
+                        else {
+                    	//posicoes = (LinkedList) posicoesTemporarias.desempilha();
+                    	posicoes = (ListaLigada) posicoesTemporarias.desempilha();
+                    	avanca_item();
+                        }
+                    }
+                    else {
+
+                        //System.out.println( s ); 
+                        // AQUI!!! pois se nao eh EXP 
+                        //nem EXPLOG nao deve ser EXP, entao...
+                        return false;
+                    }
+    	    }
+
+    	    else {
+
+                    pilhaDeInformacoes = pilhaDeInformacoes.
+                        concat("\nErro: era esperado \'(\' ou expressão logica.");
+                    return false;      
+    	    }
+        
+    	}
+
+    	if ( tipo(num_item) == Elemento.OUTROS &&
+    	     ( item(num_item).equals("&&") || item(num_item).equals("||") ) ) {        	
+    	    //posicoes = atualizaDesvios( posicoes, item( num_item ) );
+    	    //programa.atualizaDesvios( posicoes.listIterator( 0 ), item( num_item ), nao );
+    	    programa.atualizaDesvios( posicoes.inicioLista(), item( num_item ), nao );
+    	    avanca_item();
+    	}
+    	else {
+    	    //programa.atualizaDesvios( posicoes.listIterator( 0 ), null, nao );
+    	    programa.atualizaDesvios( posicoes.inicioLista(), item( num_item ), nao );
+    	    posicoesTemporarias.empilha( posicoes );
+    	    return true;
+    	}
+
+        } // while
+        
+    }
+    catch(java.lang.ArrayIndexOutOfBoundsException aobe) {
+
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nEXPLOG - Erro: final de cadeia");
+        return false;
+    }
+    }
+  
+
+    //
+    boolean IF () {
+    //LinkedList posicoes;
+    ListaLigada posicoes;
+    try {
+        System.out.println("[Compila!IF] "+item(num_item)+"==\'(\' ? "+tipo(num_item));
+
+        if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals("(") ) {        	
+    	avanca_item();
+    	if ( EXPLOG() ) {
+            System.out.println("[Compila!IF] EXPLOG");
+    	    //achou uma expressão lógica
+    	    if (tipo(num_item) != Elemento.OUTROS || !item(num_item).equals(")") ) {
+               System.out.println("[icg.compilador.Compila!IF] erro 1: \"Erro: era esperado \')\'.\" em: "+item(num_item));
+               pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \')\'.");
+               return false;
+       	       }
+    	    else {
+               // achou um ")"
+               programa.esvaziaAC();
+               //posicoes = (LinkedList) posicoesTemporarias.desempilha();
+               posicoes = (ListaLigada) posicoesTemporarias.desempilha();
+
+               avanca_item();
+               if (tipo(num_item) == Elemento.OUTROS && item(num_item).equals("{") ) {
+		  avanca_item();
+                  while( true ) {
+                    if ( C() ) {
+                       if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals("}") ) {
+                    	  avanca_item();
+                          break;
+              	          }
+                       }
+                    else {                        	    
+                       pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro (if): era esperado comando.");
+                       return false;
+                       }
+                    }//while
+                  }
+                else {
+                  if ( !C() ) {
+                     pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado comando.");
+                     return false;
+                     }              
+                  }
+                    
+                  // Aqui eh > pq depois de {} naum pode ter nada
+                  if (num_item >= itensLex.size() - 1 ) {
+                     //programa.atualizaDesvios( posicoes.listIterator( 0 ), "||", false );
+                     programa.atualizaDesvios( posicoes.inicioLista(), "||", false );
+                     return true;          
+                     }
+                    
+                 if (tipo(num_item) == Elemento.COMANDOS && item(num_item).equals(Configuracao.cmd_else)) { //"else")) {
+                    int tempMem = programa.getMemoria();
+                    // Coloca um JUMP para depois do 'else'. (*cont...*)
+                    programa.adicionaComando( "9" + programa.F );
+
+                    // Aproveitando o atualizaDesvios para substituir as posicoes que contem
+                    // F com o endereco atual.
+                    //programa.atualizaDesvios( posicoes.listIterator( 0 ), "||", false );
+                    programa.atualizaDesvios( posicoes.inicioLista(), "||", false );
+
+                    //  (*...cont*) Adiciona o F para ser substituido depois.
+                    posicoes.add( new Integer( tempMem ) );
+
+                   if ( !ELSE() )
+                      return false;
+                   }
+
+                //programa.atualizaDesvios( posicoes.listIterator( 0 ), "||", false );
+                programa.atualizaDesvios( posicoes.inicioLista(), "||", false );
+                return true;
+    	        }
+    	} // if ( EXPLOG() )
+    	else {
+    	    // não encontrou uma expressão lógica.
+            System.out.println("[Compila!IF] não é EXPLOG");
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado expressão lógica.");
+    	    return false;        
+    	    }
+        }
+        else {
+            System.out.println("[icg.compilador.Compila!IF] erro 2: \"Erro: era esperado \')\'.\" em: "+item(num_item));
+            pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \')\'.");      
+            return false;
+            }
+        
+    }
+    catch(java.lang.ArrayIndexOutOfBoundsException aobe) {
+        
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nIF - Erro: final de cadeia");
+        return false;
+    }
+    }
+    
+    
+    
+    
+    boolean ELSE () {
+
+    try {
+        
+        avanca_item();
+        
+        if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals("{") ) {        	
+    	avanca_item();
+    	while( true ) {        	    
+    	    if ( C() ) {                        
+                   if (tipo(num_item) == Elemento.OUTROS && item(num_item).equals("}") ) {
+                      avanca_item();
+                      break;
+                      }
+                   }
+    	    else {                        
+                   pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado comando.");
+                   return false;
+        	      }
+    	}//while        	
+        }
+        else {
+    	if ( !C() ){        	    
+    	   pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado comando.");
+    	   return false;
+    	   }
+            }
+    }
+    catch (java.lang.ArrayIndexOutOfBoundsException aobe) {            
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nELSE - Erro: final de cadeia");
+        return false;
+        }
+
+    return true;    
+    }
+
+  
+    boolean WHILE () {
+
+    int desvioIncondicional;
+    //LinkedList posicoes = new LinkedList();
+    ListaLigada posicoes = new ListaLigada();
+
+    try {
+        
+        if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals("(") ) {
+    	
+    	// Armazena posicao para desvio incondicional.
+    	desvioIncondicional = programa.getMemoria();
+
+    	avanca_item();
+    	if ( EXPLOG() ) {
+
+    	    if ( tipo(num_item) != Elemento.OUTROS || !item(num_item).equals(")") ) {                        
+                    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \')\'.");
+                    return false;
+    	    }
+    	    else {
+                    
+                    avanca_item();
+
+                    // Supoe que EXP_LOG jah deixou uma lista empilhada.
+                    //posicoes = (LinkedList) posicoesTemporarias.desempilha();
+                    posicoes = (ListaLigada) posicoesTemporarias.desempilha();
+
+                    programa.esvaziaAC();
+
+                    if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals("{") ) {
+                        avanca_item();
+                        while( true ) {
+                    	if ( C() ) {
+                    	    if ( tipo(num_item) == Elemento.OUTROS && item(num_item).equals("}") ) {
+                    		avanca_item();
+                    		break;
+                    	    }
+                    	}
+                    	else {                        	    
+                    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado comando.");
+                    	    return false;
+                    	}
+                    	
+                        }//while
+                    }
+                    else {
+                        if ( !C() ){                        	
+                    	pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado comando.");
+                    	return false;
+                        }
+                    }
+
+                    // Adiciona jump incondicional.
+                    programa.adicionaComando( "9" + String.valueOf( desvioIncondicional ) );
+                    
+                    // Aproveitando metodo para substituir
+                    // todos os desvios para F.
+                    //programa.atualizaDesvios( posicoes.listIterator( 0 ), "||", false ); 
+                    programa.atualizaDesvios( posicoes.inicioLista(), "||", false );
+                    
+                    return true;
+    	    }
+    	}
+    	else {
+    	    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado expressão lógica.");
+    	    return false;        
+    	}
+        }
+        else {
+    	pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \'(\'.");
+    	return false;
+        }
+        
+    } 
+    catch(java.lang.ArrayIndexOutOfBoundsException aobe) {            
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nWHILE - Erro: final de cadeia");
+        return false;
+    }
+    
+    }
+
+
+    boolean IO_LE () {
+
+    try {
+        
+        if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( "(" ) ) {        	
+    	avanca_item();
+            //System.out.println("[icg.compilador.Compila!IO_LE] "+item(num_item);
+
+    	while ( true ) {        	    
+    	    if ( tipo( num_item ) == Elemento.VARIAVEL ) {
+                    programa.le( item( num_item ) );
+                    avanca_item();
+                    if (tipo(num_item) == Elemento.OUTROS && item(num_item).equals(")")) {
+                        avanca_item();
+                        return true;
+                    }
+                    else if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( "," ) )
+                        // => ha mais parametros na funcao...
+                        avanca_item();
+                    else {
+                        System.out.println("[icg.compilador.Compila!IO_LE] erro: \"Erro: era esperado \')\' ou \',\'\" em: "+item(num_item));
+                        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \')\' ou \',\'.");
+                        return false;
+                    }
+    	      } // if ( tipo( num_item ) == Elemento.VARIAVEL )
+    	    else { //
+                    pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado variável.");
+                    //System.out.println("[icg.compilador.Compila!IO_LE] erro: \"Erro: era esperado variável.\" em: "+item(num_item));
+                    return false;
+    	        }
+    	} // FIM DO WHILE 
+    	
+        } else {
+    	pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \'(\'.");
+    	return false;
+        }
+    } 
+    catch(java.lang.ArrayIndexOutOfBoundsException aobe) {
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nIO_LE - Erro: final de cadeia");
+        return false;
+    }
+
+    }
+
+
+    boolean IO_ESCREVE(){
+
+    try {
+        
+        if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( "(" ) ) {        	
+    	avanca_item();
+    	
+    	while ( true ) {        	    
+    	    if ( tipo( num_item ) == Elemento.VARIAVEL ) {
+                    programa.escreve(item( num_item ) );                        
+                    avanca_item();
+                    if ( tipo( num_item ) == Elemento.OUTROS && item( num_item ).equals( ")" ) ) {                            
+                        avanca_item();
+                        return true;
+                    }
+                    else if ( tipo( num_item) == Elemento.OUTROS && item( num_item ).equals( "," ) )                            
+                        // => ha mais parametros na funcao...
+                            avanca_item();                        
+                        else {
+                           pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \')\' ou \',\'.");
+                           return false;
+                           }   
+    	       }
+    	    else {                        
+                    pilhaDeInformacoes = pilhaDeInformacoes.concat( "\nErro: era esperado constante." );
+                    return false;
+    	    }
+    	} // FIM DO WHILE
+    	
+        }
+        else {
+    	
+    	pilhaDeInformacoes = pilhaDeInformacoes.concat("\nErro: era esperado \'(\'.");
+    	return false;
+        }
+
+    } 
+    catch(java.lang.ArrayIndexOutOfBoundsException aobe) {
+
+        pilhaDeInformacoes = pilhaDeInformacoes.concat("\nIO_ESCREVE - Erro: final de cadeia");
+        return false;
+        }
+    }
+
+} // FIM DA CLASSE

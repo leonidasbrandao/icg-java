@@ -1,0 +1,32 @@
+package icg.compilador;
+
+/**
+ * <p>Title: </p>
+ * <p>Description: </p>
+ * <p>Copyright: Copyright (c) 2003</p>
+ * <p>Company: </p>
+ * @author not attributable
+ * @version 1.0
+ */
+
+import java.applet.*;
+import java.awt.*;
+import java.awt.event.*;
+
+public class test {
+  public test() {
+  }
+  public static void main(String[] args) {
+
+   Compilador comp = new Compilador();
+   Frame frame = new Frame();
+   frame.setTitle("Applet Frame");
+   frame.add(comp, BorderLayout.CENTER);
+   frame.setSize(600, 420);
+   Dimension d = Toolkit.getDefaultToolkit().getScreenSize();
+   frame.setLocation( (d.width - frame.getSize().width) / 2,
+                     (d.height - frame.getSize().height) / 2);
+   frame.setVisible(true);
+ }
+
+}
