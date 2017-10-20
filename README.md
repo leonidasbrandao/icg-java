@@ -28,7 +28,7 @@ and the version to Moodle 2.X and 3.X is available (including in Moodle.org).
 
 To run iCG using English language, please use command line with: java -jar iCG.jar lang=en_US
 
-Le<F4>nidas de Oliveira Brand<E3>o
-iMath / LInE Coordinator
-http://www.matematica.br
+Leônidas de Oliveira Brandão<br/>
+iMath / LInE Coordinator<br/>
+http://www.matematica.br<br/>
 http://line.ime.usp.br
